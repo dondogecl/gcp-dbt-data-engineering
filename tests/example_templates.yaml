@@ -1,0 +1,127 @@
+# Configuration for daily transactions DQ checks # 1
+project_id: "your-team-project"
+table_name: "your-team-project.raw.transactions"
+
+# Email notifications
+notifications:
+  on_failure: ["data-team@team.com", "transactions-team@team.com"] 
+  on_warning: ["data-team@team.com"]
+
+# Data quality tests configuration
+tests:
+  completeness:
+    - "source"
+    - "rut" 
+    - "nombre_cliente"
+    - "currency"
+    - "code_operation"
+  
+  uniqueness:
+    - ["rut", "code_operation", "fecha"]  # Business key
+    - ["transaction_id"]                   # Technical key
+  
+  format:
+    currency: "length_3"           # Must be 3-letter currency code
+    customer_rate: "positive"      # Must be positive number
+    nombre_cliente: "not_empty"    # Company name required
+    rut: "numeric_11"             # 11-digit rut number
+  
+  range:
+    customer_rate:
+      min: 0.001
+      max: 100.0
+    spread_percentage:
+      min: 0
+      max: 50
+  
+  custom_sql:
+    - test_name: "valid_currency_codes"
+      sql_condition: "currency IN ('USD', 'EUR', 'COP', 'PEN', 'CLP')"
+      severity: "ERROR"
+    
+    - test_name: "future_date_check" 
+      sql_condition: "fecha <= CURRENT_DATE()"
+      severity: "ERROR"
+    
+    - test_name: "account_hierarchy_check"
+      sql_condition: "cuentabt RLIKE '^[0-9]{6}$' AND cuenta_integradora RLIKE '^[0-9]{4}$'"
+      severity: "WARNING"
+
+# Quality thresholds
+quality_thresholds:
+  completeness_threshold: 95.0    # Minimum completeness %
+  max_failure_rate: 5.0          # Maximum failure rate %
+  critical_columns: ["rut", "currency", "customer_rate"]
+
+# Processing configuration
+processing:
+  batch_size: 100000
+  timeout_seconds: 300
+  retry_failed_tests: true
+
+######################################################################################
+
+# Example 2
+
+# Configuration for weekly customer DQ checks  
+project_id: "your-bank-project"
+table_name: "your-bank-project.curated.customers"
+
+notifications:
+  on_failure: ["data-team@bank.com", "compliance-team@bank.com"]
+
+tests:
+  completeness:
+    - "customer_id"
+    - "ruc"
+    - "company_name" 
+    - "registration_date"
+    - "kyc_status"
+  
+  uniqueness:
+    - ["customer_id"]
+    - ["ruc"]
+  
+  format:
+    ruc: "numeric_11"
+    email: "email_format"
+    phone: "phone_format"
+  
+  custom_sql:
+    - test_name: "kyc_compliance"
+      sql_condition: "kyc_status IN ('APPROVED', 'PENDING', 'REJECTED')"
+      severity: "ERROR"
+    
+    - test_name: "active_customers_complete_profile"
+      sql_condition: "status != 'ACTIVE' OR (email IS NOT NULL AND phone IS NOT NULL)"
+      severity: "WARNING"
+
+quality_thresholds:
+  completeness_threshold: 99.0  # Higher threshold for customer data
+  max_failure_rate: 1.0
+  critical_columns: ["customer_id", "ruc", "kyc_status"]
+
+# Weekly processing settings
+processing:
+  full_table_scan: true  # Check entire table for weekly runs
+  timeout_seconds: 600   # Longer timeout for full scans
+
+#########################################################################################
+
+## Directory Structure
+
+# gs://your-config-bucket/
+# ├── dq-jobs/
+# │   ├── dq_transactions_daily.yaml
+# │   ├── dq_accounts_daily.yaml  
+# │   ├── dq_customers_weekly.yaml
+# │   ├── dq_products_monthly.yaml
+# │   └── dq_regulatory_reporting.yaml
+# ├── sql-rules/
+# │   ├── business_rules/
+# │   │   ├── account_hierarchy.sql
+# │   │   └── regulatory_compliance.sql
+# │   └── common/
+# │       └── currency_validation.sql
+# └── scripts/
+#     └── generic_dq_checker.py
